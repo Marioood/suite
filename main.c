@@ -4,12 +4,36 @@
 #include <stdlib.h>
 #include <ctype.h>
 
+typedef int AnyTemp;
+
+enum AnyType
+{
+    TYPE_NONE,
+    TYPE_INT,
+    TYPE_STRING
+};
+
+//void pointers, scary!
+typedef struct
+{
+    enum AnyType type;
+    void *value;
+} Any;
+
 enum TokenType
 {
     TOKEN_ADD,
     TOKEN_MUL,
-    TOKEN_INT
+    TOKEN_INT,
+    TOKEN_CONSTANT_DEF,
+    TOKEN_SYMBOL
 };
+
+typedef struct
+{
+    enum TokenType type;
+    Any data;
+} Token;
 
 enum OpType
 {
@@ -21,38 +45,69 @@ enum OpType
 
 typedef struct
 {
-    enum TokenType type;
-    int value;
-} Token;
-
-typedef struct
-{
     enum OpType type;
-    int value;
+    Any data;
 } Op;
+
+/*int main()
+{
+
+    Any things[2] = {0};
+    Any thing = {0};
+
+    int val = 123;
+    thing.type = TYPE_INT;
+    thing.value = &val;
+    things[0] = thing;
+
+    char *str = "I love C!";
+    thing.type = TYPE_STRING;
+    thing.value = str;
+    things[1] = thing;
+    Any_getString()
+    Any_getInt()
+
+    printf("%d%s\n", *(int*)things[0].value, (char*)things[1].value);
+
+    return 0;
+}*/
 
 int main()
 {
+        //"constant pi 31415"
+        //"pi 69 + 2 *"
+
     char sourceCode[] =
     (
-        "1 2 + "
-        "69 *"
+        "1 2 +"
     );
     int sourceCodeLen = strlen(sourceCode);
 
+    //tokenization
     const int tokenStackCap = 256;
     Token tokenStack[256] = {0};
     int tokenStackIdx = 0;
 
     Token curToken;
-    //"1 2 +"
-    //| |
+
     int tokenStartIdx = 0; //TODO: account for leading spaces
 
     bool tokenIsNumeric = true;
     const int textualTokenCap = 32;
     char textualToken[32] = {0};
     int textualTokenIdx = 0;
+
+    //shitty linear dict
+    int symbolLookupCap = 256;
+    char *symbolStringLookup[256] = {0};
+    int symbolValueLookup[256] = {0};
+    int symbolLookupIdx = 0;
+
+    symbolStringLookup[symbolLookupIdx] = "pi";
+    symbolValueLookup[symbolLookupIdx] = 31415;
+    symbolLookupIdx++;
+
+    Any thingTemp = {0};
 
     for(int c = 0; c < sourceCodeLen; c++)
     {
@@ -71,30 +126,68 @@ int main()
 
             if(tokenIsNumeric)
             {
+                int intTemp = atoi(textualToken);
+                thingTemp.type = TYPE_INT;
+                thingTemp.value = &intTemp;
+
                 curToken.type = TOKEN_INT;
-                curToken.value = atoi(textualToken);
+                curToken.data = thingTemp;
                 tokenStack[tokenStackIdx] = curToken;
                 tokenStackIdx++;
                 printf("atoi\n");
             }
             else if(strcmp(textualToken, "+") == 0)
             {
+                thingTemp.type = TYPE_NONE;
+                thingTemp.value = NULL;
+
                 curToken.type = TOKEN_ADD;
-                curToken.value = 0;
+                curToken.data = thingTemp;
+
                 tokenStack[tokenStackIdx] = curToken;
                 tokenStackIdx++;
             }
             else if(strcmp(textualToken, "*") == 0)
             {
+                thingTemp.type = TYPE_NONE;
+                thingTemp.value = NULL;
+
                 curToken.type = TOKEN_MUL;
-                curToken.value = 0;
+                curToken.data = thingTemp;
+
+                tokenStack[tokenStackIdx] = curToken;
+                tokenStackIdx++;
+            }
+            else if(strcmp(textualToken, "constant") == 0)
+            {
+                thingTemp.type = TYPE_NONE;
+                thingTemp.value = NULL;
+
+                curToken.type = TOKEN_CONSTANT_DEF;
+                curToken.data = thingTemp;
+
                 tokenStack[tokenStackIdx] = curToken;
                 tokenStackIdx++;
             }
             else
             {
-                printf("unknown token starting at index: %d\n", tokenStartIdx);
-                //return 1;
+                //curToken.type = TOKEN_SYMBOL;
+                //curToken.data = 0;
+                //tokenStack[tokenStackIdx] = curToken;
+                //tokenStackIdx++;
+                printf("symbol found instead of int or keyword at: %d\n", tokenStartIdx);
+
+                /*for(int s = 0; s < symbolLookupIdx; s++)
+                {
+                    if(strcmp(symbolStringLookup[s], textualToken) == 0)
+                    {
+                        curToken.type = TOKEN_INT;
+                        curToken.data = symbolValueLookup[s];
+                        tokenStack[tokenStackIdx] = curToken;
+                        tokenStackIdx++;
+                        break;
+                    }
+                }*/
             }
 
             tokenStartIdx = c;
@@ -130,11 +223,22 @@ int main()
                 textualType = "int";
                 break;
 
+            case TOKEN_CONSTANT_DEF:
+                textualType = "constant";
+                break;
+
             default:
                 textualType = "unreachable";
                 break;
         }
-        printf("%d: (%s, %d)\n", i, textualType, tokenStack[i].value);
+        if(tokenStack[i].data.type == TYPE_INT)
+        {
+            printf("%d: (%s, %d)\n", i, textualType, *(int*)tokenStack[i].data.value);
+        }
+        else
+        {
+            printf("%d: (%s)\n", i, textualType);
+        }
     }
 
     //parsing
@@ -151,21 +255,21 @@ int main()
         {
             case TOKEN_ADD:
                 curOp.type = OP_ADD;
-                curOp.value = 0;
+                curOp.data = curToken.data;
                 break;
 
             case TOKEN_MUL:
                 curOp.type = OP_MUL;
-                curOp.value = 0;
+                curOp.data = curToken.data;
                 break;
 
             case TOKEN_INT:
                 curOp.type = OP_PUSH_INT;
-                curOp.value = curToken.value;
+                curOp.data = curToken.data;
                 break;
 
             default:
-                printf("unknown token '%d' found during parsing", curToken.type);
+                printf("unknown token '%d' found during parsing\n", curToken.type);
                 break;
         }
 
@@ -173,8 +277,12 @@ int main()
         programIdx++;
     }
 
+
+    thingTemp.type = TYPE_NONE;
+    thingTemp.value = NULL;
+
     curOp.type = OP_PRINT;
-    curOp.value = 0;
+    curOp.data = thingTemp;
     program[programIdx] = curOp;
     programIdx++;
 
@@ -206,7 +314,14 @@ int main()
                 textualType = "unreachable";
                 break;
         }
-        printf("%d: (%s, %d)\n", i, textualType, program[i].value);
+        if(program[i].data.type == TYPE_INT)
+        {
+            printf("%d: (%s, %d)\n", i, textualType, *(int*)program[i].data.value);
+        }
+        else
+        {
+            printf("%d: (%s)\n", i, textualType);
+        }
     }
 
     //run program
@@ -252,7 +367,7 @@ int main()
                 }
                 else
                 {
-                    simStack[simStackIdx] = curOp.value;
+                    simStack[simStackIdx] = *(int*)curOp.data.value;
                     simStackIdx++;
                 }
                 break;
