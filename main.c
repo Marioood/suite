@@ -26,7 +26,9 @@ enum TokenType
     TOKEN_MUL,
     TOKEN_INT,
     TOKEN_CONSTANT_DEF,
-    TOKEN_SYMBOL
+    TOKEN_SYMBOL,
+    TOKEN_PRIM_PRINT,
+    TOKEN_END
 };
 
 typedef struct
@@ -51,14 +53,11 @@ typedef struct
 
 int main()
 {
-        //"constant pi 31415"
-        //"pi 69 + 2 *"
-
     char sourceCode[] =
     (
-        //"constant two 2 "
-        //"two 4 *"
-        "pi 1 +"
+        "constant nine 9 end "
+        "constant ten 10 end "
+        "nine ten + print"
     );
     int sourceCodeLen = strlen(sourceCode);
 
@@ -132,10 +131,28 @@ int main()
                 tokenStack[tokenStackIdx] = curToken;
                 tokenStackIdx++;
             }
+            else if(strcmp(textualToken, "print") == 0)
+            {
+                curToken.type = TOKEN_PRIM_PRINT;
+                curToken.data.type = TYPE_NONE;
+                curToken.data.value = NULL;
+
+                tokenStack[tokenStackIdx] = curToken;
+                tokenStackIdx++;
+            }
+            else if(strcmp(textualToken, "end") == 0)
+            {
+                curToken.type = TOKEN_END;
+                curToken.data.type = TYPE_NONE;
+                curToken.data.value = NULL;
+
+                tokenStack[tokenStackIdx] = curToken;
+                tokenStackIdx++;
+            }
             else
             {
                 //TODO: this leaks memory!
-                char *textualSymbol  = malloc(sizeof(char) * textualTokenCap);
+                char *textualSymbol = malloc(sizeof(char) * textualTokenCap);
                 textualSymbol = strcpy(textualSymbol, textualToken);
 
                 curToken.type = TOKEN_SYMBOL;
@@ -189,6 +206,14 @@ int main()
                 textualType = "symbol";
                 break;
 
+            case TOKEN_PRIM_PRINT:
+                textualType = "print";
+                break;
+
+            case TOKEN_END:
+                textualType = "end";
+                break;
+
             default:
                 textualType = "unreachable";
                 break;
@@ -225,9 +250,7 @@ int main()
     int symbolValueLookup[256] = {0};
     int symbolLookupIdx = 0;
 
-    symbolStringLookup[symbolLookupIdx] = "pi";
-    symbolValueLookup[symbolLookupIdx] = 31415;
-    symbolLookupIdx++;
+    bool isDefiningConstant = false;
 
     for(int i = 0; i < tokenStackIdx; i++)
     {
@@ -238,62 +261,103 @@ int main()
             case TOKEN_ADD:
                 curOp.type = OP_ADD;
                 curOp.data = curToken.data;
+
+                program[programIdx] = curOp;
+                programIdx++;
                 break;
 
             case TOKEN_MUL:
                 curOp.type = OP_MUL;
                 curOp.data = curToken.data;
+
+                program[programIdx] = curOp;
+                programIdx++;
                 break;
 
             case TOKEN_INT:
-                curOp.type = OP_PUSH_INT;
+            {
+                if(isDefiningConstant) //constant is being defined
+                {
+                    symbolValueLookup[symbolLookupIdx] = *(int*)curToken.data.value;
+                }
+                else
+                {
+                    curOp.type = OP_PUSH_INT;
+                    curOp.data = curToken.data;
+
+                    program[programIdx] = curOp;
+                    programIdx++;
+                }
+                break;
+            }
+            case TOKEN_PRIM_PRINT:
+                curOp.type = OP_PRINT;
                 curOp.data = curToken.data;
+
+                program[programIdx] = curOp;
+                programIdx++;
+                break;
+
+            case TOKEN_CONSTANT_DEF:
+                //this is used in TOKEN_SYMBOL, TOKEN_INT, and TOKEN_END cases
+                isDefiningConstant = true;
                 break;
 
             case TOKEN_SYMBOL:
             {
-                bool symbolIsDefined = false;
                 char *textualSymbol = (char*)curToken.data.value;
 
-                for(int s = 0; s < symbolLookupIdx; s++)
+                if(isDefiningConstant) //constant is being defined
                 {
-                    if(strcmp(symbolStringLookup[s], textualSymbol) == 0)
-                    {
-                        //TODO: this leaks memory! deal with that later!!!
-                        int *intp = malloc(sizeof(int));
-                        *intp = symbolValueLookup[s];
-
-                        curOp.type = OP_PUSH_INT;
-                        curOp.data.type = TYPE_INT;
-                        curOp.data.value = intp;
-
-                        symbolIsDefined = true;
-                        break;
-                    }
+                    symbolStringLookup[symbolLookupIdx] = textualSymbol;
                 }
-
-                if(!symbolIsDefined)
+                else //constant is used in an equation
                 {
-                    printf("symbol '%s' has not been defined\n", textualSymbol);
+                    bool symbolIsDefined = false;
+
+                    for(int s = 0; s < symbolLookupIdx; s++)
+                    {
+                        if(strcmp(symbolStringLookup[s], textualSymbol) == 0)
+                        {
+                            //TODO: this leaks memory! deal with that later!!!
+                            int *intp = malloc(sizeof(int));
+                            *intp = symbolValueLookup[s];
+
+                            curOp.type = OP_PUSH_INT;
+                            curOp.data.type = TYPE_INT;
+                            curOp.data.value = intp;
+
+                            symbolIsDefined = true;
+
+                            program[programIdx] = curOp;
+                            programIdx++;
+                            break;
+                        }
+                    }
+
+                    if(!symbolIsDefined)
+                    {
+                        printf("symbol '%s' has not been defined\n", textualSymbol);
+                    }
                 }
                 break;
             }
+            case TOKEN_END:
+                symbolLookupIdx++;
+                isDefiningConstant = false;
+                break;
 
             default:
                 printf("unknown token '%d' found during parsing\n", curToken.type);
                 break;
         }
-
-        program[programIdx] = curOp;
-        programIdx++;
     }
 
-    curOp.type = OP_PRINT;
-    curOp.data.type = TYPE_NONE;
-    curOp.data.value = NULL;
-
-    program[programIdx] = curOp;
-    programIdx++;
+    printf("-- defined symbols --\n");
+    for(int i = 0; i < symbolLookupIdx; i++)
+    {
+        printf("constant %s = %d\n", symbolStringLookup[i], symbolValueLookup[i]);
+    }
 
     printf("-- program operations --\n");
 
