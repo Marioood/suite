@@ -49,29 +49,6 @@ typedef struct
     Any data;
 } Op;
 
-/*int main()
-{
-
-    Any things[2] = {0};
-    Any thing = {0};
-
-    int val = 123;
-    thing.type = TYPE_INT;
-    thing.value = &val;
-    things[0] = thing;
-
-    char *str = "I love C!";
-    thing.type = TYPE_STRING;
-    thing.value = str;
-    things[1] = thing;
-    Any_getString()
-    Any_getInt()
-
-    printf("%d%s\n", *(int*)things[0].value, (char*)things[1].value);
-
-    return 0;
-}*/
-
 int main()
 {
         //"constant pi 31415"
@@ -79,7 +56,9 @@ int main()
 
     char sourceCode[] =
     (
-        "1 2 +"
+        //"constant two 2 "
+        //"two 4 *"
+        "pi 1 +"
     );
     int sourceCodeLen = strlen(sourceCode);
 
@@ -96,18 +75,6 @@ int main()
     const int textualTokenCap = 32;
     char textualToken[32] = {0};
     int textualTokenIdx = 0;
-
-    //shitty linear dict
-    int symbolLookupCap = 256;
-    char *symbolStringLookup[256] = {0};
-    int symbolValueLookup[256] = {0};
-    int symbolLookupIdx = 0;
-
-    symbolStringLookup[symbolLookupIdx] = "pi";
-    symbolValueLookup[symbolLookupIdx] = 31415;
-    symbolLookupIdx++;
-
-    Any thingTemp = {0};
 
     for(int c = 0; c < sourceCodeLen; c++)
     {
@@ -126,68 +93,59 @@ int main()
 
             if(tokenIsNumeric)
             {
-                int intTemp = atoi(textualToken);
-                thingTemp.type = TYPE_INT;
-                thingTemp.value = &intTemp;
+                //TODO: this leaks memory! deal with that later!!!
+                int *intp = malloc(sizeof(int));
+                *intp = atoi(textualToken);
 
                 curToken.type = TOKEN_INT;
-                curToken.data = thingTemp;
+                curToken.data.type = TYPE_INT;
+                curToken.data.value = intp;
+
                 tokenStack[tokenStackIdx] = curToken;
                 tokenStackIdx++;
                 printf("atoi\n");
             }
             else if(strcmp(textualToken, "+") == 0)
             {
-                thingTemp.type = TYPE_NONE;
-                thingTemp.value = NULL;
-
                 curToken.type = TOKEN_ADD;
-                curToken.data = thingTemp;
+                curToken.data.type = TYPE_NONE;
+                curToken.data.value = NULL;
 
                 tokenStack[tokenStackIdx] = curToken;
                 tokenStackIdx++;
             }
             else if(strcmp(textualToken, "*") == 0)
             {
-                thingTemp.type = TYPE_NONE;
-                thingTemp.value = NULL;
-
                 curToken.type = TOKEN_MUL;
-                curToken.data = thingTemp;
+                curToken.data.type = TYPE_NONE;
+                curToken.data.value = NULL;
 
                 tokenStack[tokenStackIdx] = curToken;
                 tokenStackIdx++;
             }
             else if(strcmp(textualToken, "constant") == 0)
             {
-                thingTemp.type = TYPE_NONE;
-                thingTemp.value = NULL;
-
                 curToken.type = TOKEN_CONSTANT_DEF;
-                curToken.data = thingTemp;
+                curToken.data.type = TYPE_NONE;
+                curToken.data.value = NULL;
 
                 tokenStack[tokenStackIdx] = curToken;
                 tokenStackIdx++;
             }
             else
             {
-                //curToken.type = TOKEN_SYMBOL;
-                //curToken.data = 0;
-                //tokenStack[tokenStackIdx] = curToken;
-                //tokenStackIdx++;
-                printf("symbol found instead of int or keyword at: %d\n", tokenStartIdx);
+                //TODO: this leaks memory!
+                char *textualSymbol  = malloc(sizeof(char) * textualTokenCap);
+                textualSymbol = strcpy(textualSymbol, textualToken);
 
-                /*for(int s = 0; s < symbolLookupIdx; s++)
-                {
-                    if(strcmp(symbolStringLookup[s], textualToken) == 0)
-                    {
-                        curToken.type = TOKEN_INT;
-                        curToken.data = symbolValueLookup[s];
-                        tokenStack[tokenStackIdx] = curToken;
-                        tokenStackIdx++;
-                        break;
-                    }
-                }*/
+                curToken.type = TOKEN_SYMBOL;
+                curToken.data.type = TYPE_STRING;
+                curToken.data.value = textualSymbol;
+
+                tokenStack[tokenStackIdx] = curToken;
+                tokenStackIdx++;
+
+                printf("symbol found instead of int or keyword at: %d\n", tokenStartIdx);
             }
 
             tokenStartIdx = c;
@@ -227,17 +185,31 @@ int main()
                 textualType = "constant";
                 break;
 
+            case TOKEN_SYMBOL:
+                textualType = "symbol";
+                break;
+
             default:
                 textualType = "unreachable";
                 break;
         }
-        if(tokenStack[i].data.type == TYPE_INT)
+        switch(tokenStack[i].data.type)
         {
-            printf("%d: (%s, %d)\n", i, textualType, *(int*)tokenStack[i].data.value);
-        }
-        else
-        {
-            printf("%d: (%s)\n", i, textualType);
+            case TYPE_INT:
+                printf("%d: (%s, %d)\n", i, textualType, *(int*)tokenStack[i].data.value);
+                break;
+
+            case TYPE_STRING:
+                printf("%d: (%s, %s)\n", i, textualType, (char*)tokenStack[i].data.value);
+                break;
+
+            case TYPE_NONE:
+                printf("%d: (%s)\n", i, textualType);
+                break;
+
+            default:
+                printf("%d: (%s, ???unknown type)\n");
+                break;
         }
     }
 
@@ -246,6 +218,16 @@ int main()
     Op program[256] = {0};
     int programIdx = 0;
     Op curOp;
+
+    //shitty linear dict
+    int symbolLookupCap = 256;
+    char *symbolStringLookup[256] = {0};
+    int symbolValueLookup[256] = {0};
+    int symbolLookupIdx = 0;
+
+    symbolStringLookup[symbolLookupIdx] = "pi";
+    symbolValueLookup[symbolLookupIdx] = 31415;
+    symbolLookupIdx++;
 
     for(int i = 0; i < tokenStackIdx; i++)
     {
@@ -268,6 +250,35 @@ int main()
                 curOp.data = curToken.data;
                 break;
 
+            case TOKEN_SYMBOL:
+            {
+                bool symbolIsDefined = false;
+                char *textualSymbol = (char*)curToken.data.value;
+
+                for(int s = 0; s < symbolLookupIdx; s++)
+                {
+                    if(strcmp(symbolStringLookup[s], textualSymbol) == 0)
+                    {
+                        //TODO: this leaks memory! deal with that later!!!
+                        int *intp = malloc(sizeof(int));
+                        *intp = symbolValueLookup[s];
+
+                        curOp.type = OP_PUSH_INT;
+                        curOp.data.type = TYPE_INT;
+                        curOp.data.value = intp;
+
+                        symbolIsDefined = true;
+                        break;
+                    }
+                }
+
+                if(!symbolIsDefined)
+                {
+                    printf("symbol '%s' has not been defined\n", textualSymbol);
+                }
+                break;
+            }
+
             default:
                 printf("unknown token '%d' found during parsing\n", curToken.type);
                 break;
@@ -277,12 +288,10 @@ int main()
         programIdx++;
     }
 
-
-    thingTemp.type = TYPE_NONE;
-    thingTemp.value = NULL;
-
     curOp.type = OP_PRINT;
-    curOp.data = thingTemp;
+    curOp.data.type = TYPE_NONE;
+    curOp.data.value = NULL;
+
     program[programIdx] = curOp;
     programIdx++;
 
