@@ -28,7 +28,9 @@ enum TokenType
     TOKEN_CONSTANT_DEF,
     TOKEN_SYMBOL,
     TOKEN_PRIM_PRINT,
-    TOKEN_END
+    TOKEN_END,
+    TOKEN_DUP,
+    TOKEN_SWAP
 };
 
 typedef struct
@@ -42,7 +44,9 @@ enum OpType
     OP_ADD,
     OP_MUL,
     OP_PUSH_INT,
-    OP_PRINT
+    OP_PRINT,
+    OP_DUP,
+    OP_SWAP
 };
 
 typedef struct
@@ -51,15 +55,37 @@ typedef struct
     Any data;
 } Op;
 
-int main()
+int main(void)
 {
-    char sourceCode[] =
-    (
-        "constant nine 9 end "
-        "constant ten 10 end "
-        "nine ten + print"
-    );
-    int sourceCodeLen = strlen(sourceCode);
+    const int sourceCodeCap = 256;
+    char sourceCode[256] = {};
+    int sourceCodeIdx = 0;
+
+    FILE *fp = fopen("guinea.suite", "r");
+
+    if(fp == NULL)
+    {
+        printf("could not locate source code\n");
+        return 1;
+    }
+
+    bool isEof = false;
+
+    while(!isEof)
+    {
+        char curChar = getc(fp);
+
+        if(curChar == EOF)
+        {
+            isEof = true;
+        }
+        else
+        {
+            sourceCode[sourceCodeIdx] = curChar;
+            sourceCodeIdx++;
+        }
+    }
+    fclose(fp);
 
     //tokenization
     const int tokenStackCap = 256;
@@ -74,11 +100,23 @@ int main()
     const int textualTokenCap = 32;
     char textualToken[32] = {0};
     int textualTokenIdx = 0;
+    //this memory HAS to be dynamically allocated, because the Any type uses *void
+    //it works just like the other stacks
+    const int intDumpsterCap = 256;
+    int *intDumpster = malloc(sizeof(int) * intDumpsterCap);
+    int intDumpsterIdx = 0;
 
-    for(int c = 0; c < sourceCodeLen; c++)
+    const int symbolDumpsterCap = 256;
+    char *symbolDumpster = malloc(sizeof(char) * symbolDumpsterCap);
+    int symbolDumpsterIdx = 0;
+    //intDumpster[0] = 2;
+    //intDumpster[1] = 69;
+    //printf("%d %d\n", *intDumpster, *(intDumpster + 1));
+
+    for(int c = 0; c < sourceCodeIdx; c++)
     {
         char curChar = sourceCode[c];
-        bool isLastChar = c == sourceCodeLen - 1;
+        bool isLastChar = c == sourceCodeIdx - 1;
 
         if(isLastChar && !isspace(curChar))
         {
@@ -92,9 +130,9 @@ int main()
 
             if(tokenIsNumeric)
             {
-                //TODO: this leaks memory! deal with that later!!!
-                int *intp = malloc(sizeof(int));
+                int *intp = intDumpster + intDumpsterIdx;
                 *intp = atoi(textualToken);
+                intDumpsterIdx++;
 
                 curToken.type = TOKEN_INT;
                 curToken.data.type = TYPE_INT;
@@ -149,11 +187,41 @@ int main()
                 tokenStack[tokenStackIdx] = curToken;
                 tokenStackIdx++;
             }
+            else if(strcmp(textualToken, "dup") == 0)
+            {
+                curToken.type = TOKEN_DUP;
+                curToken.data.type = TYPE_NONE;
+                curToken.data.value = NULL;
+
+                tokenStack[tokenStackIdx] = curToken;
+                tokenStackIdx++;
+            }
+            else if(strcmp(textualToken, "swap") == 0)
+            {
+                curToken.type = TOKEN_SWAP;
+                curToken.data.type = TYPE_NONE;
+                curToken.data.value = NULL;
+
+                tokenStack[tokenStackIdx] = curToken;
+                tokenStackIdx++;
+            }
             else
             {
-                //TODO: this leaks memory!
-                char *textualSymbol = malloc(sizeof(char) * textualTokenCap);
-                textualSymbol = strcpy(textualSymbol, textualToken);
+                int textualTokenLen = strlen(textualToken);
+                char *textualSymbol = NULL;
+
+                if(textualTokenLen + symbolDumpsterIdx <= symbolDumpsterCap)
+                {
+                    textualSymbol = symbolDumpster + symbolDumpsterIdx;
+                    textualSymbol = strcpy(textualSymbol, textualToken);
+                    //add 1 to account for null character
+                    symbolDumpsterIdx += textualTokenLen + 1;
+                }
+                else
+                {
+                    printf("stack overflow in symbol dumpster!\n");
+                    return 1;
+                }
 
                 curToken.type = TOKEN_SYMBOL;
                 curToken.data.type = TYPE_STRING;
@@ -212,6 +280,14 @@ int main()
 
             case TOKEN_END:
                 textualType = "end";
+                break;
+
+            case TOKEN_DUP:
+                textualType = "dup";
+                break;
+
+            case TOKEN_SWAP:
+                textualType = "swap";
                 break;
 
             default:
@@ -274,6 +350,22 @@ int main()
                 programIdx++;
                 break;
 
+            case TOKEN_DUP:
+                curOp.type = OP_DUP;
+                curOp.data = curToken.data;
+
+                program[programIdx] = curOp;
+                programIdx++;
+                break;
+
+            case TOKEN_SWAP:
+                curOp.type = OP_SWAP;
+                curOp.data = curToken.data;
+
+                program[programIdx] = curOp;
+                programIdx++;
+                break;
+
             case TOKEN_INT:
             {
                 if(isDefiningConstant) //constant is being defined
@@ -319,9 +411,9 @@ int main()
                     {
                         if(strcmp(symbolStringLookup[s], textualSymbol) == 0)
                         {
-                            //TODO: this leaks memory! deal with that later!!!
-                            int *intp = malloc(sizeof(int));
+                            int *intp = intDumpster + intDumpsterIdx;
                             *intp = symbolValueLookup[s];
+                            intDumpsterIdx++;
 
                             curOp.type = OP_PUSH_INT;
                             curOp.data.type = TYPE_INT;
@@ -359,6 +451,9 @@ int main()
         printf("constant %s = %d\n", symbolStringLookup[i], symbolValueLookup[i]);
     }
 
+    //symbols are not used in simulation, so free that memory
+    free(symbolDumpster);
+
     printf("-- program operations --\n");
 
     for(int i = 0; i < programIdx; i++)
@@ -381,6 +476,14 @@ int main()
 
             case OP_PRINT:
                 textualType = "print";
+                break;
+
+            case OP_DUP:
+                textualType = "dup";
+                break;
+
+            case OP_SWAP:
+                textualType = "swap";
                 break;
 
             default:
@@ -420,7 +523,6 @@ int main()
                 simStackIdx++;
                 break;
             }
-
             case OP_MUL:
             {
                 simStackIdx--;
@@ -431,7 +533,29 @@ int main()
                 simStackIdx++;
                 break;
             }
-
+            case OP_DUP:
+            {
+                simStackIdx--;
+                int a = simStack[simStackIdx];
+                simStack[simStackIdx] = a;
+                simStackIdx++;
+                simStack[simStackIdx] = a;
+                simStackIdx++;
+                break;
+            }
+            case OP_SWAP:
+            {
+                simStackIdx--;
+                int a = simStack[simStackIdx];
+                simStackIdx--;
+                int b = simStack[simStackIdx];
+                simStackIdx++;
+                simStack[simStackIdx] = a;
+                simStackIdx++;
+                simStack[simStackIdx] = b;
+                simStackIdx++;
+                break;
+            }
             case OP_PUSH_INT:
                 if(simStackIdx > simStackCap)
                 {
@@ -455,6 +579,8 @@ int main()
                 return 1;
         }
     }
+    //final cleanup
+    free(intDumpster);
 
     return 0;
 }
