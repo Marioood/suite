@@ -1,0 +1,28 @@
+                       constant spaceTest 69420 end
+constant pi 31415 end
+constant sqrt2 1414 end ;oh shit a comment over here!
+1 2 + print
+;this does shit idk -- returns
+;another comment
+2 4 *                              print
+pi sqrt2 swap print print
+69 dupe dupe print print print
+
+function square =>
+  dupe *
+  print
+  return
+end
+
+3 square goto
+
+constant true 1 end
+constant false 0 end
+
+;OP_GOTO_IF_NOT address condition --
+
+if 1 1 = not then
+  69 print
+end
+
+420 print

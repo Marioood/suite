@@ -1,0 +1,7 @@
+0
+label loop
+  1 +
+  stack???
+  if dupe 16 < then
+    loop goto
+  end

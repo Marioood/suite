@@ -1,0 +1,8 @@
+6 goto
+
+label square
+  dup *
+  print
+  return
+
+3 square goto
