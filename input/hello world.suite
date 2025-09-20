@@ -1,5 +1,3 @@
-constant true 1 end
-constant FALSE 0 end
 constant '\n' 10 end
 constant '\r' 13 end
 constant 'SP' 32 end
@@ -8,25 +6,23 @@ constant ',' 44 end
 constant 'H' 72 end
 constant 'd' 100 end
 constant 'e' 101 end
-constant 'f' 102 end
 constant 'l' 108 end
 constant 'o' 111 end
 constant 'r' 114 end
-constant 't' 116 end
 constant 'w' 119 end
 
-if false then
-  '!' put
-else
-  if FALSE then
-    67 print
-  else
-    if FALSE then
-      41 print
-    else
-      25 print
-    end
-  end
-end
-
-420 print
+'H' put
+'e' put
+'l' put
+'l' put
+'o' put
+',' put
+'SP' put
+'w' put
+'o' put
+'r' put
+'l' put
+'d' put
+'!' put
+'\n' put
+'\r' put

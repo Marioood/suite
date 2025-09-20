@@ -1,6 +1,8 @@
                        constant spaceTest 69420 end
 constant pi 31415 end
 constant sqrt2 1414 end ;oh shit a comment over here!
+constant true 1 end
+constant false 0 end
 1 2 + print
 ;this does shit idk -- returns
 ;another comment
@@ -16,13 +18,63 @@ end
 
 3 square goto
 
-constant true 1 end
-constant false 0 end
-
 ;OP_GOTO_IF_NOT address condition --
 
 if 1 1 = not then
   69 print
 end
 
+;lop
+
+0
+label loop
+  1 +
+  stack???
+  if dupe 16 < then
+    loop goto
+  end
+  
+;nested if statements
+if true then
+  420 print
+  
+  if true then
+    69 print
+    
+    if false then
+      41 print
+    end
+  end
+end
+
+67 print
+
+;nested if-else statements
+if false then
+  '!' put
+else
+  if FALSE then
+    67 print
+  else
+    if FALSE then
+      41 print
+    else
+      25 print
+    end
+  end
+end
+
 420 print
+
+function bool2char => ;bool -- char
+  if then
+    't'
+  else
+    'f'
+  end
+
+  put
+  return
+end
+
+true bool2char goto

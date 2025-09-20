@@ -1,0 +1,24 @@
+Goal:
+SUITE is a functional stack-based programming language for... something? File formats... or image processing?
+
+Milestones:
+[X] A language
+[X] constants
+[X] labels and goto
+[X] functions
+[X] if statements
+[X] loops
+[X] character printing (Hello, world!)
+[X] if-else and also if statements in if statements
+[X] if statements in functions
+[ ] proper return statements
+[ ] implement rule 110
+[ ] support for different types
+[ ] import external code
+[ ] algebra-style functions (undefined, functions with specific return values for specific parameter values and domains)
+[ ] implement conway's game of life
+[ ] support for custom typess
+
+Syntax and keywords:
+DONT GET TOO ATTACHED TO THESE!!!!!!!
+switch_itUp-bro!

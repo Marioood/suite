@@ -47,6 +47,7 @@ enum TokenType
     TOKEN_RETURN,
     TOKEN_GOTO,
     TOKEN_DEBUG_PRINT_STACK,
+    TOKEN_PUTCHAR,
     //syntax "sugar" (not preserved when tokens are converted to operations)
     TOKEN_SYMBOL,
     TOKEN_END,
@@ -55,7 +56,8 @@ enum TokenType
     TOKEN_FUNCTION_DEF,
     TOKEN_FUNCTION_ARROW,
     TOKEN_IF_DEF,
-    TOKEN_THEN
+    TOKEN_THEN,
+    TOKEN_ELSE
 };
 
 typedef struct
@@ -91,7 +93,8 @@ enum OpType
     OP_RETURN,
     OP_GOTO,
     OP_GOTO_IF_NOT,
-    OP_DEBUG_PRINT_STACK
+    OP_DEBUG_PRINT_STACK,
+    OP_PUTCHAR
 };
 
 typedef struct
@@ -105,8 +108,8 @@ typedef struct
 
 int main(void)
 {
-    const int sourceCodeCap = 256;
-    char sourceCode[256] = {};
+    const int sourceCodeCap = 512;
+    char sourceCode[512] = {};
     int sourceCodeIdx = 0;
 
     FILE *fp = fopen("input/guinea.suite", "r");
@@ -131,6 +134,12 @@ int main(void)
         {
             sourceCode[sourceCodeIdx] = curChar;
             sourceCodeIdx++;
+        }
+
+        if(sourceCodeIdx > sourceCodeCap)
+        {
+            printf("could not create source code buffer; source code exceeds %d chars\n", sourceCodeCap);
+            return 1;
         }
     }
     //hack because some tokens would disappear if they were at the end of the file
@@ -457,6 +466,24 @@ int main(void)
                 tokenStack[tokenStackIdx] = curToken;
                 tokenStackIdx++;
             }
+            else if(strcmp(textualToken, "put") == 0)
+            {
+                curToken.type = TOKEN_PUTCHAR;
+                curToken.data.type = TYPE_VOID;
+                curToken.data.value = NULL;
+
+                tokenStack[tokenStackIdx] = curToken;
+                tokenStackIdx++;
+            }
+            else if(strcmp(textualToken, "else") == 0)
+            {
+                curToken.type = TOKEN_ELSE;
+                curToken.data.type = TYPE_VOID;
+                curToken.data.value = NULL;
+
+                tokenStack[tokenStackIdx] = curToken;
+                tokenStackIdx++;
+            }
             else
             {
                 //add 1 to account for null character
@@ -618,6 +645,14 @@ int main(void)
                 textualType = "stack???";
                 break;
 
+            case TOKEN_PUTCHAR:
+                textualType = "put";
+                break;
+
+            case TOKEN_ELSE:
+                textualType = "else";
+                break;
+
             default:
                 textualType = "unreachable";
                 break;
@@ -649,7 +684,7 @@ int main(void)
     Op curOp;
 
     //shitty linear dict
-    int symbolLookupCap = 256;
+    const int symbolLookupCap = 256;
     char *symbolStringLookup[256] = {0};
     int symbolValueLookup[256] = {0};
     int symbolLookupIdx = 0;
@@ -658,13 +693,14 @@ int main(void)
     bool isDefiningLabel = false;
     bool isDefiningFunction = false;
     bool inFunctionBody = false;
-    bool isDefiningIf = false;
-    //for functions
+    int ifDeepness = 0;
+    bool isDefiningElse = false;
+    //for functions and if statements
     //they are fancy labels with gotos before them, and the address AFTER the function needs to be found.
     //and so to avoid complicated BS, just assign them when we know the address after the function
-
-    //TODO: this will not work if an if statement is inside of a function
-    int *toBeAssigned = NULL;
+    const int toBeAssignedCap = 32;
+    int *toBeAssigned[32] = {0};
+    int toBeAssignedIdx = 0;
 
     for(int i = 0; i < tokenStackIdx; i++)
     {
@@ -824,6 +860,14 @@ int main(void)
                 programIdx++;
                 break;
 
+            case TOKEN_PUTCHAR:
+                curOp.type = OP_PUTCHAR;
+                curOp.data = curToken.data;
+
+                program[programIdx] = curOp;
+                programIdx++;
+                break;
+
             case TOKEN_INT:
             {
                 if(isDefiningConstant) //constant is being defined
@@ -855,17 +899,48 @@ int main(void)
                 break;
 
             case TOKEN_IF_DEF:
+                break;
+
+            case TOKEN_ELSE:
             {
+                //CONDTION in-else goto-if-not
+                //  '!' put
+                //goto after-if-else
+                //label in-else
+                //  41 print
+                //label after-if-else
+                isDefiningElse = true;
+                int *intp = intDumpster + intDumpsterIdx;
+                intDumpsterIdx++;
+                //still inside if block, jump ahead of else block
+                curOp.type = OP_PUSH_INT;
+                curOp.data.type = TYPE_INT;
+                curOp.data.value = intp;
+
+                program[programIdx] = curOp;
+                programIdx++;
+                curOp.type = OP_GOTO;
+                curOp.data.type = TYPE_VOID;
+                curOp.data.value = NULL;
+
+                program[programIdx] = curOp;
+                programIdx++;
+                //have the 'if' block jump to the 'else' block
+                toBeAssignedIdx--;
+                *toBeAssigned[toBeAssignedIdx] = programIdx;
+                //overwrite the toBeAssigned address for 'if,' since it is now assigned
+                toBeAssigned[toBeAssignedIdx] = intp;
+                toBeAssignedIdx++;
                 break;
             }
-
             case TOKEN_THEN:
             {
-                isDefiningIf = true;
+                ifDeepness++;
 
                 int *intp = intDumpster + intDumpsterIdx;
-                toBeAssigned = intp;
                 intDumpsterIdx++;
+                toBeAssigned[toBeAssignedIdx] = intp;
+                toBeAssignedIdx++;
 
                 curOp.type = OP_PUSH_INT;
                 curOp.data.type = TYPE_INT;
@@ -902,8 +977,9 @@ int main(void)
                 else if(isDefiningFunction && !inFunctionBody)
                 {
                     int *intp = intDumpster + intDumpsterIdx;
-                    toBeAssigned = intp;
                     intDumpsterIdx++;
+                    toBeAssigned[toBeAssignedIdx] = intp;
+                    toBeAssignedIdx++;
 
                     curOp.type = OP_PUSH_INT;
                     curOp.data.type = TYPE_INT;
@@ -962,17 +1038,20 @@ int main(void)
                     symbolLookupIdx++;
                     isDefiningConstant = false;
                 }
+                else if(ifDeepness > 0)
+                {
+                    //address of the instruction after the function body
+                    toBeAssignedIdx--;
+                    *toBeAssigned[toBeAssignedIdx] = programIdx;
+                    ifDeepness--;
+                }
                 else if(isDefiningFunction)
                 {
                     //address of the instruction after the function body
-                    *toBeAssigned = programIdx;
+                    toBeAssignedIdx--;
+                    *toBeAssigned[toBeAssignedIdx] = programIdx;
                     isDefiningFunction = false;
-                }
-                else if(isDefiningIf)
-                {
-                    //address of the instruction after the function body
-                    *toBeAssigned = programIdx;
-                    isDefiningIf = false;
+                    inFunctionBody = false;
                 }
                 else
                 {
@@ -981,7 +1060,7 @@ int main(void)
                 break;
 
             case TOKEN_FUNCTION_ARROW:
-                inFunctionBody = false;
+                inFunctionBody = true;
                 break;
 
             default:
@@ -1089,6 +1168,10 @@ int main(void)
 
             case OP_DEBUG_PRINT_STACK:
                 textualType = "stack???";
+                break;
+
+            case OP_PUTCHAR:
+                textualType = "put";
                 break;
 
             default:
@@ -1307,6 +1390,11 @@ int main(void)
             case OP_PRINT:
                 simStackIdx--;
                 printf("%d\n", simStack[simStackIdx]);
+                break;
+
+            case OP_PUTCHAR:
+                simStackIdx--;
+                putchar(simStack[simStackIdx]);
                 break;
 
             case OP_DEBUG_PRINT_STACK:
